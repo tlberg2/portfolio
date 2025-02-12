@@ -1,4 +1,3 @@
-
 # Goal of this file is to remove boilerplate from simulate_claims.R (but it's not really working rn)
 
 # Map the name of the dist to the fxn to simulate it
@@ -17,16 +16,17 @@ frequency_simulators <- list(
     # TODO: support it!
   },
   negative_binomial = function(params, n) {
-      if (is.null(params$r) || is.null(params$p)) 
-          stop("r and p are required for Negative Binomial distribution.")
-      rnbinom(n, size = params$r, prob = params$p)
+    if (is.null(params$r) || is.null(params$p)) {
+      stop("r and p are required for Negative Binomial distribution.")
+    }
+    rnbinom(n, size = params$r, prob = params$p)
   }
 )
 
 simulate_frequency <- function(dist, params, n) {
   dist_lower <- gsub(" ", "_", tolower(dist))
   simulator <- frequency_simulators[[dist_lower]]
-  
+
   if (is.null(simulator)) stop(paste("Unsupported freq. dist: ", dist))
   simulator(params, n)
 }
@@ -36,13 +36,15 @@ simulate_frequency <- function(dist, params, n) {
 
 severity_simulators <- list(
   gamma = function(params, n) {
-    if (is.null(params$alpha) || is.null(params$theta))
-        stop("Alpha and Theta are required for the Gamma distribution.")
+    if (is.null(params$alpha) || is.null(params$theta)) {
+      stop("Alpha and Theta are required for the Gamma distribution.")
+    }
     rgamma(n, shape = params$alpha, rate = params$theta)
   },
   lognormal = function(params, n) {
-    if (is.null(params$mu) || is.null(params$sdlog))
+    if (is.null(params$mu) || is.null(params$sdlog)) {
       stop("Mu and sigma are required for the Lognormal distribution")
+    }
     rlnorm(n, meanlog = params$mu, sdlog = params$sdlog)
   }
 )

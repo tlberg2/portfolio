@@ -1,4 +1,3 @@
-
 # enum / type defs for user input options
 
 # TODO: not using this rn -> do we even want/need it ??
