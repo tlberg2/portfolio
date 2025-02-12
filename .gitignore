@@ -1,6 +1,8 @@
 .ignore
 data/
 logs
+# tmp excel files
+~$*.xlsm
 
 # History files
 .Rhistory
