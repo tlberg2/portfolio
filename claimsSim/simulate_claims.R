@@ -14,8 +14,6 @@
   log_message <- function(message, log_file, level = "INFO") {
     timestamp <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
     level <- toupper(level)
-
-    # format log
     log_entry <- paste0("[", timestamp, "] [", level, "] ", message)
 
     if (level %in% c("ERROR", "WARNING")) {
@@ -24,14 +22,12 @@
       cat(log_entry, "\n") # Print to console
     }
 
-    # Append log entry to log file
     write(log_entry, file = log_file, append = TRUE)
   }
 
-  # customStop() will log the error, output a message (prefixed with "ERROR:")
+  # customStop() will log the error, output a message (ending with "ERROR")
   # so that VBA can catch it, and then quit appropriately.
   customStop <- function(calledFromVBA, status, error_message) {
-    # Log the error
     log_message(paste("ERROR:", error_message), log_file, "ERROR")
     # Print error message to stdout (so that AppleScript receives it) (vba looks for an 'ERROR' suffix now)
     cat(error_message, "ERROR")
@@ -52,13 +48,89 @@
     if (!is.na(num_value)) {
       return(num_value)
     }
-    return(value) # Return as character if it's not a number
+    return(value)
+  }
+
+  parse_parameters <- function(args, log_file) {
+    params <- list(
+      freqDist = gsub(" ", "_", tolower(args[1])),
+      freqLambda = sanitize_input(args[2], NULL),
+      freqProb = sanitize_input(args[3], NULL),
+      freqTrials = sanitize_input(args[4], NULL),
+
+      sevDist = args[5],
+      sevAlpha = sanitize_input(args[6], NULL),
+      sevTheta = sanitize_input(args[7], NULL),
+      sevMu = sanitize_input(args[8], NULL),
+      sevSigma = sanitize_input(args[9], NULL),
+
+      n_policies = 500 # should let users choose this
+    )
+
+    # Log the parsed arguments
+    log_message(paste(
+      "Parsed input parameters -",
+      "Freq Dist:", params$freqDist, "| Lambda:", params$freqLambda, "| Prob:", params$freqProb, "| Trials:", params$freqTrials,
+      "Sev Dist:", params$sevDist, "| Alpha:", params$sevAlpha, "| Theta:", params$sevTheta, "| Mu:", params$sevMu, "| Sigma:", params$sevSigma
+    ), log_file, "DEBUG")
+
+    return(params)
+  }
+
+  build_frequency_params <- function(freqDist, freqLambda, freqProb, freqTrials) {
+    params <- list(
+      # for poisson
+      lambda = freqLambda,
+      # for binomial
+      p = freqProb,
+      trials = freqTrials
+    )
+
+    return(params)
+  }
+
+  build_severity_params <- function(sevDist, sevAlpha, sevTheta, sevMu, sevSigma) {
+    params <- list(
+      # gamma
+      alpha = sevAlpha,
+      theta = sevTheta,
+      # lognormal
+      mu = sevMu,
+      sdlog = sevSigma
+    )
+    return(params)
+  }
+
+  # simple simulation fxn -> sims claim frequencies then their severities
+  simulate_claims <- function(n_policies, freq_vector, sevDist, sev_params) {
+    policy_ids <- seq_len(n_policies)
+    simulated_data_list <- vector("list", length = sum(freq_vector))
+    idx <- 1
+
+    for (i in seq_len(n_policies)) {
+      n_claims <- freq_vector[i]
+      if (n_claims > 0) {
+        claim_sevs <- simulate_severity(sevDist, sev_params, n_claims)
+        claim_dates <- sample(seq(as.Date("2024-01-01"), as.Date("2024-12-31"), by = "day"),
+          size = n_claims, replace = TRUE
+        )
+
+        simulated_data_list[[idx]] <- data.frame(
+          PolicyID = policy_ids[i],
+          ClaimAmount = claim_sevs,
+          ClaimDate = claim_dates
+        )
+        idx <- idx + 1
+      }
+    }
+
+    simulated_data <- do.call(rbind, simulated_data_list)
+    return(simulated_data)
   }
 }
 
-#-------------------------------
-# 0. Setup - make sure we know where we are so we can log and save the data
-#-------------------------------
+set.seed(123)
+
 {
   ##################### Figure out if we're coming from VBA
   # Get command-line args (excluding the script name)
@@ -67,7 +139,6 @@
   # Check for VBA flag
   calledFromVBA <- "--calledFromVBA" %in% args
   args <- args[args != "--calledFromVBA"]
-  #####################
 
   # Get this script's directory
   if (interactive()) {
@@ -76,7 +147,6 @@
       library(rstudioapi)
       cur_dir <- dirname(rstudioapi::getSourceEditorContext()$path)
     } else {
-      # Use customStop here so the error is logged and output properly
       customStop(FALSE, 1, "Don't know how to get script path in interactive mode without RStudio.")
     }
   } else {
@@ -142,6 +212,7 @@ tryCatch(
 
 tryCatch(
   {
+    params <- parse_parameters(args, log_file)
     # # TODO: need a usage msg at the top of this script
     #
     # Here are the params that are passed in from vba (in order):
@@ -157,50 +228,8 @@ tryCatch(
     # severity_mu = Quote(GetValOrDflt("severity_mu"))
     # severity_sigma = Quote(GetValOrDflt("severity_sigma"))
 
-    # freq. dist. options
-    freqDist <- gsub(" ", "_", tolower(args[1])) # "poisson" or "binomial" rn
-    freqLambda <- sanitize_input(args[2], NULL) # for poisson
-    freqProb <- sanitize_input(args[3], NULL) # for binomial: p
-    freqTrials <- sanitize_input(args[4], NULL) # for binomial: num 'trials' each policy holder will encounter during the course of their policy
-
-    # severity dist. options
-    sevDist <- args[5] # e.g. "gamma"
-    sevAlpha <- sanitize_input(args[6], NULL) # for gamma
-    sevTheta <- sanitize_input(args[7], NULL) # for gamma
-    sevMu <- sanitize_input(args[8], NULL) # for lognormal
-    sevSigma <- sanitize_input(args[9], NULL) # for lognormal
-
-    n_policies <- 500 # can add this as a param too
-
-    # Build frequency parameters list based on distribution
-    freq_params <- list()
-    if (freqDist == "poisson") {
-      freq_params$lambda <- freqLambda
-    } else if (freqDist == "binomial") {
-      freq_params$p <- freqProb
-      freq_params$trials <- freqTrials
-    } else if (freqDist == "negative_binomial") {
-      customStop(FALSE, 1, "The negative binomial distribution is not currently supported.")
-    }
-
-    # Build severity parameters list
-    sev_params <- list()
-    if (tolower(sevDist) == "gamma") {
-      sev_params$alpha <- sevAlpha
-      sev_params$theta <- sevTheta
-    } else if (tolower(sevDist) == "lognormal") {
-      sev_params$mu <- sevMu
-      sev_params$sdlog <- sevSigma
-      # Rename sigma to sdlog
-      names(sev_params)[names(sev_params) == "sigma"] <- "sdlog"
-    }
-
-    # Log the parsed arguments
-    log_message(paste(
-      "Parsed input parameters -",
-      "Freq Dist:", freqDist, "| Lambda:", freqLambda, "| Prob:", freqProb, "| Trials:", freqTrials,
-      "Sev Dist:", sevDist, "| Alpha:", sevAlpha, "| Theta:", sevTheta, "| Mu:", sevMu, "| Sigma:", sevSigma
-    ), log_file, "DEBUG")
+    freq_params <- build_frequency_params(params$freqDist, params$freqLambda, params$freqProb, params$freqTrials)
+    sev_params <- build_severity_params(params$sevDist, params$sevAlpha, params$sevTheta, params$sevMu, params$sevSigma)
   },
   error = function(e) {
     log_message("failed trying to parseCmdLineArgs", log_file, "ERROR")
@@ -214,43 +243,13 @@ tryCatch(
 
 tryCatch(
   {
-    set.seed(123) # For reproducibility
+    freq_vector <- simulate_frequency(params$freqDist, freq_params, params$n_policies)
+    simulated_data <- simulate_claims(params$n_policies, freq_vector, params$sevDist, sev_params)
 
-    # Generate the number of claims for each policy
-    freq_vector <- simulate_frequency(freqDist, freq_params, n_policies)
-    policy_ids <- seq_len(n_policies)
-
-    # store each policy's claims in a list, then rbind at the end
-    simulated_data_list <- vector("list", length = sum(freq_vector))
-    idx <- 1
-
-    for (i in seq_len(n_policies)) {
-      n_claims <- freq_vector[i]
-      if (n_claims > 0) {
-        # Generate claim severities
-        claim_sevs <- simulate_severity(sevDist, sev_params, n_claims)
-        # Generate random claim dates
-        claim_dates <- sample(seq(as.Date("2024-01-01"), as.Date("2024-12-31"), by = "day"),
-          size = n_claims, replace = TRUE
-        )
-
-        simulated_data_list[[idx]] <- data.frame(
-          PolicyID = policy_ids[i],
-          ClaimAmount = claim_sevs,
-          ClaimDate = claim_dates
-        )
-        idx <- idx + 1
-      }
-    }
-
-    # Combine all claim rows into one data frame
-    simulated_data <- do.call(rbind, simulated_data_list)
-
-    # Write the simulation results to a CSV (to be read by Excel Power Query)
     output_file <- file.path(data_dir, "claimSimResults.csv")
     write.csv(simulated_data, output_file, row.names = FALSE)
 
-    log_message(paste("Simulation complete. Data saved to", output_file), log_file)
+    log_message(paste0("Simulation complete. Output saved to", output_file), log_file)
   },
   error = function(e) {
     log_message(list.files(cur_dir), log_file, "ERROR")
