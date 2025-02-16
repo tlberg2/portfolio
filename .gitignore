@@ -3,6 +3,7 @@ data/
 logs
 # tmp excel files
 ~$*.xlsm
+ClaimsDashboard.pdf
 
 # History files
 .Rhistory
