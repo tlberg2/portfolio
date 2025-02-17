@@ -1,47 +1,53 @@
 # Overview
-This project is a basic Frequency/Severity simulation and analyzer
+This project is a basic Frequency/Severity simulation and analyzer. You can use it to simulate and visualize basic claims data.
 
 ## Requirements
 - Microsoft Excel with VBA enabled
 - Mac
-    + Can't use another OS because the VBA that runs when the "Run Simulation" button is clicked uses the "AppleScriptTask" function to run an AppleScript file that runs the R script that generates the csv that the dashboard pulls data from
-        - Note: it seems like it's not too bad to add support to windows because there's the wscript thing that seems nicer than the applescript fxnality
-    + Note: I think it would work on windows if you didn't use the "Run Simulation" button
-        - You could run the R script separately, and then click "Data > Refresh All" to update all the data
-        - TODO: give an example for how to run the Rscript from the terminal
-
-## How to Use
-1. TODO: run the setup script.
-2. TODO: enter the settings in the "Settings" page.
-3. In the two tables in the top-left of the "Dashboard" sheet, choose which distribution parameters you want to use.
-4. Click **Run Simulation.**
-    - An R script will run to generate simulated claims data in a csv.
-    - PowerQuery will load the csv and clean it up so it's usable.
-5. Summary statistics and charts are shown using the data from the generated csv.
-6. (optional) Click **Generate PDF** to export the dashboard as a PDF.
+    + Mac is required because the VBA that runs when the "Run Simulation" button is clicked uses the AppleScriptTask function to run an AppleScript file that runs an R script to generate the CSV data that populates the dashboard.
 
 ## Dashboard Output
-There are 4 sections on the dashboard. The first is for user inputs, and the last three hold the following:
-
+There are 4 sections on the dashboard:
+- Inputs
+    - User-configurable distribution parameters for claim frequency and severity
 - Frequency
-    - Chart of the PDF
-    - Distribution summary
-        + Note: "0-claim Policies" refers to the number of policies that had 0 claims
+    - Bar chart displaying the Probability Distribution Function (PDF) of claim counts per policy.
+    - Distribution Summary
+        + Note: "0-claim Policies" refers to the number of policies that had 0 claims.
     - Percentiles
         + Note: users can change which percentiles are shown
 - Severity
-    - boxplot and empirical CDF charts
+    - boxplot and CDF (Cumulative Distribution Function) charts of claim amounts
     - Distribution summary
         + Note: the "Total Losses" statistic is the total claim amount across all policies
     - Largest claims
-        + This table holds the top 5 largest claims, along with their policy ID's and the date they occurred on
+        + This table holds the top 5 largest individual claims, along with Policy ID and Claim Date
     - Percentiles
         + Note: Users can change which percentiles are shown
 - Policy-Level Loss
-    - boxplot and empirical CDF charts
+    - Boxplot and CDF chart of total losses per policy.
     - Distribution summary
     - Top Policies by Loss Amount
         + This table holds the 5 policies with the highest total losses
     - Percentiles
         + Users can change which percentiles are shown
-- Export dashboard to PDF functionality
+
+## How to Use
+1. Run the setup script (claimsSim/setup.sh)
+    - The setup script copies an AppleScript (runRScript.scpt - the compiled version of runRScript.applescript) to a directory Excel looks in when the AppleScriptTask method is used in VBA.
+2. Open ClaimsAnalysis.xlsm
+    - Click "Enable Macros"
+    - Click "Enable Content" on the warning that says "Security Warning External Data Connections have been disabled"
+    - Launch the powerquery editor, click "Options", then under "Project" click "Privacy" and check "Allow combining data from multiple sources. This could expose sensitive or confidential data to an unauthorized person" and click "Okay"
+3. Go to the "Settings" sheet and:
+    - Update the Rscript path to be where Rscript is installed on your computer
+        - To find this, run ```which Rscript``` from your terminal
+        - If this returns "Rscript not found", then you'll need to install it (https://cran.r-project.org/bin/macosx/). Once it's installed, run ```which Rscript``` to see where Rscript is on your computer, and then update the "Rscript path" setting in the spreadsheet if it's different
+    - (Optional) Update the "Max Claim Amount" setting if you want to - this is just the policy limit for each claim - when the simulation is run and powerquery pulls in the claims data, it will cap claims with this amount
+    - The "Num Policies" setting is currently hardcoded in the simulation code, so this setting is not adjustable. Support for changing this might be added in the future.
+4. In the two tables in the top-left of the "Dashboard" sheet, choose your frequency and severity distribution parameters.
+5. Click **Run Simulation.**
+    - An R script will run to generate simulated claims data and save it to a csv.
+    - PowerQuery loads the csv and processes it so that the dashboard can use it.
+6. Summary statistics and charts are updated with the data from the generated csv.
+7. (Optional) Click **Generate PDF** to export the dashboard as a PDF.
