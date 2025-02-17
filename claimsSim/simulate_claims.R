@@ -12,6 +12,12 @@
 #-------------------------------
 {
   log_message <- function(message, log_file, level = "INFO") {
+
+    if (!dir.exists(dirname(log_file))) {
+        dir.create(dirname(log_file), recursive = TRUE)
+        log_message("Created the log directory.", log_file)
+    }
+
     timestamp <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
     level <- toupper(level)
     log_entry <- paste0("[", timestamp, "] [", level, "] ", message)
@@ -197,7 +203,6 @@ set.seed(123)
 #-------------------------------
 tryCatch(
   {
-    source(file.path(cur_dir, "enums.R"))
     source(file.path(cur_dir, "simulation_functions.R"))
   },
   error = function(e) {
