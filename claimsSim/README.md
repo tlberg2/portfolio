@@ -1,6 +1,6 @@
 # Overview
 This project lets you run and visualize basic claim frequency/severity simulations in Excel using VBA and R.
-**Note: This project requires macOS** due to its reliance on AppleScript for VBA-to-R integration.
+**Note: This project requires macOS** because it uses VBA's AppleScriptTask method for VBA-to-R integration.
 
 ## Requirements
 - Microsoft Excel with VBA enabled
